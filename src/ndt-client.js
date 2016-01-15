@@ -12,39 +12,37 @@
 
 'use strict';
 
-var NDTjs = {};
-
-NDTjs.constants = {
-  /*
-   * Send 1MiB websocket messages, as this seems to cause Chrome to have the
-   * fewest performance problems.  It is important that this number be a
-   * multiple of 8192, as the NDT protocol asks that we send 8192 bytes at a
-   * time.  We can't force websocket implementations to hold to that (RFC6455
-   * sec. 5.4 makes explicit that websocket clients may fragment messages in
-   * any way they want), but we should at least make it possible for them to
-   * send multiples of 8192 bytes.
-   */
-  SEND_BUFFER_SIZE: 8192 * 128
-};
-
-NDTjs.settings = {
-  serverAddress: undefined,
-  serverPort: 3001,
-  serverPath: '/ndt_protocol',
-  updateInterval: 0,
-  metaInformation: {
-    'client.application': 'NDTjs'
-  },
-  verboseDebug: false
-};
-
-NDTjs.results = {
-  c2sRate: undefined,
-  s2cRate: undefined
-};
-
-NDTjs.init = function(serverAddress, serverPort, serverPath, updateInterval,
+function NDTjs (serverAddress, serverPort, serverPath, updateInterval,
     verboseDebug) {
+
+  this.constants = {
+    /*
+     * Send 1MiB websocket messages, as this seems to cause Chrome to have the
+     * fewest performance problems.  It is important that this number be a
+     * multiple of 8192, as the NDT protocol asks that we send 8192 bytes at a
+     * time.  We can't force websocket implementations to hold to that (RFC6455
+     * sec. 5.4 makes explicit that websocket clients may fragment messages in
+     * any way they want), but we should at least make it possible for them to
+     * send multiples of 8192 bytes.
+     */
+    SEND_BUFFER_SIZE: 8192 * 128
+  };
+
+  this.settings = {
+    serverAddress: undefined,
+    serverPort: 3001,
+    serverPath: '/ndt_protocol',
+    updateInterval: 0,
+    metaInformation: {
+      'client.application': 'NDTjs'
+    },
+    verboseDebug: false
+  };
+
+  this.results = {
+    c2sRate: undefined,
+    s2cRate: undefined
+  };
 
   if (serverPort !== undefined) {
     this.settings.serverPort = Number(serverPort);
@@ -58,4 +56,4 @@ NDTjs.init = function(serverAddress, serverPort, serverPath, updateInterval,
   if (verboseDebug !== undefined && verboseDebug instanceof Boolean) {
     this.settings.verboseDebug = verboseDebug;
   }
-};
+}
