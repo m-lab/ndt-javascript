@@ -8,12 +8,26 @@
  */
 
 /* jslint bitwise: true, browser: true, nomen: true, indent: 2, -W097 */
-/* global Uint8Array, Blob, WebSocket */
+/* global Uint8Array, Blob, WebSocket, console */
 
 'use strict';
 
-var NDTjs = function (serverAddress, serverPort, serverPath, updateInterval,
-    verboseDebug) {
+/**
+ * NDTjs Constructor.
+ *
+ * @param {String} serverAddress - NDT Server FQDN or IP Address
+ * @param {Number} [serverPort="3001"] - NDT Server Port
+ * @param {String} [serverPath="/ndt_protocol"] NDT Server URL Path
+ * @param {Boolean} [verboseDebug="true"] Level of Debugging for NDTjs Client
+ * @constructor
+ */
+
+var NDTjs = function(serverAddress, serverPort, serverPath, verboseDebug) {
+  var defaultSettings = {
+    serverPort: Number(3001),
+    serverPath: String('/ndt_protocol'),
+    verboseDebug: Boolean(true)
+  };
 
   this.constants = {
     /*
@@ -27,18 +41,11 @@ var NDTjs = function (serverAddress, serverPort, serverPath, updateInterval,
      */
     SEND_BUFFER_SIZE: 8192 * 128
   };
-
   this.settings = {
-    serverAddress: undefined,
-    serverPort: 3001,
-    serverPath: '/ndt_protocol',
-    updateInterval: 0,
     metaInformation: {
-      'client.application': 'NDTjs'
-    },
-    verboseDebug: false
+      'client.application': String('NDTjs')
+    }
   };
-
   this.results = {
     c2sRate: undefined,
     s2cRate: undefined
@@ -46,12 +53,19 @@ var NDTjs = function (serverAddress, serverPort, serverPath, updateInterval,
 
   this.settings.serverAddress = String(serverAddress);
   this.settings.serverPort = (serverPort !== undefined) ? Number(serverPort) :
-      this.settings.serverPort;
+      defaultSettings.serverPort;
   this.settings.serverPath = (serverPath !== undefined) ? String(serverPath) :
-      this.settings.serverPath;
-  this.settings.updateInterval = (updateInterval !== undefined) ?
-      Number(updateInterval) : this.settings.updateInterval;
+      defaultSettings.serverPath;
   this.settings.verboseDebug = (verboseDebug !== undefined &&
       verboseDebug instanceof Boolean) ? verboseDebug :
-      this.settings.verboseDebug;
+      defaultSettings.verboseDebug;
+
+  this.logger('Initialized NDTjs with the following settings: ' +
+      JSON.stringify(this.settings));
+};
+
+NDTjs.prototype.logger = function(logMessage) {
+  if (this.settings.verboseDebug) {
+    console.log(logMessage);
+  }
 };
