@@ -12,7 +12,7 @@
 
 'use strict';
 
-function NDTjs (serverAddress, serverPort, serverPath, updateInterval,
+var NDTjs = function (serverAddress, serverPort, serverPath, updateInterval,
     verboseDebug) {
 
   this.constants = {
@@ -44,16 +44,14 @@ function NDTjs (serverAddress, serverPort, serverPath, updateInterval,
     s2cRate: undefined
   };
 
-  if (serverPort !== undefined) {
-    this.settings.serverPort = Number(serverPort);
-  }
-  if (serverPath !== undefined) {
-    this.settings.serverPath = String(serverPath);
-  }
-  if (updateInterval !== undefined) {
-    this.settings.updateInterval = Number(updateInterval);
-  }
-  if (verboseDebug !== undefined && verboseDebug instanceof Boolean) {
-    this.settings.verboseDebug = verboseDebug;
-  }
-}
+  this.settings.serverAddress = String(serverAddress);
+  this.settings.serverPort = (serverPort !== undefined) ? Number(serverPort) :
+      this.settings.serverPort;
+  this.settings.serverPath = (serverPath !== undefined) ? String(serverPath) :
+      this.settings.serverPath;
+  this.settings.updateInterval = (updateInterval !== undefined) ?
+      Number(updateInterval) : this.settings.updateInterval;
+  this.settings.verboseDebug = (verboseDebug !== undefined &&
+      verboseDebug instanceof Boolean) ? verboseDebug :
+      this.settings.verboseDebug;
+};
