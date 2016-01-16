@@ -7,7 +7,7 @@
   },
   "license": "Apache-2.0",
   "scripts": {
-    "lint": "jshint src && jscs src",
+    "lint": "jshint src test && jscs src test",
     "test": "karma start test/karma.conf.js --single-run",
     "travis": "npm run lint && npm run test"
   },
