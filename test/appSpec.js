@@ -32,8 +32,8 @@ describe('tests that browser support checks work', function() {
   'use strict';
 
   it('checkBrowserSupport returns false without WebSockets', function() {
-    var WebSocket = undefined,
-        ndtClientObject = new NDTjs('test.address.measurement-lab.org');
+    var WebSocket;
+    var ndtClientObject = new NDTjs('test.address.measurement-lab.org');
     window.WebSocket = undefined;
     window.MozWebSocket = undefined;
 
@@ -41,11 +41,11 @@ describe('tests that browser support checks work', function() {
   });
 
   it('ndtClientObject throws Error without browser support', function() {
-    var WebSocket = undefined;
+    var WebSocket;
     window.WebSocket = undefined;
     window.MozWebSocket = undefined;
 
-    expect(function () { new NDTjs('test.address.measurement-lab.org'); })
+    expect(function() { new NDTjs('test.address.measurement-lab.org'); })
         .toThrow(new Error('UnsupportedBrowser'));
   });
 });
