@@ -62,10 +62,37 @@ var NDTjs = function(serverAddress, serverPort, serverPath, verboseDebug) {
 
   this.logger('Initialized NDTjs with the following settings: ' +
       JSON.stringify(this.settings));
+
+  if (!this.checkBrowserSupport()) {
+    this.logger('Browser or runtime environment does not support WebSockets');
+    throw new Error('UnsupportedBrowser');
+  }
 };
 
+/**
+ * Log a message to the console if debugging is enabled.
+ *
+ * @param {String} logMessage - The message to log.
+ */
+
 NDTjs.prototype.logger = function(logMessage) {
+
   if (this.settings.verboseDebug) {
     console.log(logMessage);
   }
+};
+
+/**
+ * Check that the browser supports the NDT test.
+ *
+ * @returns {Boolean} Browser supports necessary functions for test client.
+ */
+
+NDTjs.prototype.checkBrowserSupport = function() {
+
+  if (WebSocket === undefined && window.WebSocket === undefined &&
+      window.MozWebSocket === undefined) {
+    return false;
+  }
+  return true;
 };
