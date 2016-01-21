@@ -96,3 +96,52 @@ NDTjs.prototype.checkBrowserSupport = function() {
   }
   return true;
 };
+
+/**
+ * Parses messages received from the NDT server.
+ *
+ * @param {Buffer} passedBuffer Raw message received from the NDT server.
+ * @returns {Object} Parsed messaged with type and message properties.
+ */
+
+NDTjs.prototype.parseNDTMessage = function(passedBuffer) {
+  var i;
+  var bufferUint8;
+  var NDTMessage = {
+    'type': [],
+    'message': undefined,
+  };
+  try {
+    bufferUint8 = new Uint8Array(passedBuffer);
+    NDTMessage.message = String.fromCharCode.apply(null,
+        new Uint8Array(passedBuffer.slice(3)));
+  } catch (caughtError) {
+    this.logger('Caught exception: ' + caughtError);
+    throw new Error('NDTMessageParserError');
+  }
+
+  for (i = 0; i < 3; i += 1) {
+    NDTMessage.type[i] = bufferUint8[i];
+  }
+
+  return NDTMessage;
+};
+
+/**
+ * A simple helper function to create a WebSocket consistently.
+ *
+ * @param {String} serverAddress The FQDN or IP of the NDT server.
+ * @param {Number} serverPort The port expected for the NDT test.
+ * @param {String} serverPath The path of the resource to request from NDT.
+ * @param {String} websocketProtocol The WebSocket protocol to build for.
+ * @returns {WebSocket} The WebSocket we created;
+ */
+
+NDTjs.prototype.createWebSocket = function(serverAddress, serverPort,
+                                           serverPath, websocketProtocol) {
+  var createdWebSocket;
+  createdWebSocket = new WebSocket('ws://' + serverAddress + ':' +
+      serverPort + serverPath, websocketProtocol);
+  createdWebSocket.binaryType = 'arraybuffer';
+  return createdWebSocket;
+};
