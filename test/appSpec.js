@@ -31,9 +31,18 @@ describe('tests for initialization functions', function() {
 describe('tests that browser support checks work', function() {
   'use strict';
 
+  var defaultWebSocket = window.WebSocket;
+  var defaultMozWebSocket = window.MozWebSocket;
+
+  afterEach(function() {
+    window.WebSocket = defaultWebSocket;
+    window.MozWebSocket = defaultMozWebSocket;
+  });
+
   it('checkBrowserSupport returns false without WebSockets', function() {
     var WebSocket;
     var ndtClientObject = new NDTjs('test.address.measurement-lab.org');
+
     window.WebSocket = undefined;
     window.MozWebSocket = undefined;
 
@@ -42,10 +51,57 @@ describe('tests that browser support checks work', function() {
 
   it('ndtClientObject throws Error without browser support', function() {
     var WebSocket;
+
     window.WebSocket = undefined;
     window.MozWebSocket = undefined;
 
     expect(function() { new NDTjs('test.address.measurement-lab.org'); })
         .toThrow(new Error('UnsupportedBrowser'));
+  });
+});
+
+describe('tests for WebSockets functions', function() {
+  beforeEach(function() {
+    spyOn(window, 'WebSocket').and.callFake(function(url) {
+      socketMock = {
+        url: url,
+        readyState: WebSocket.CONNECTING,
+        send: jasmine.createSpy(),
+        close: jasmine.createSpy().and.callFake(function() {
+          socketMock.readyState = WebSocket.CLOSING;
+        }),
+
+        // methods to mock the internal behaviour of the real WebSocket
+        _open: function() {
+          socketMock.readyState = WebSocket.OPEN;
+          // socketMock.onopen && socketMock.onopen();
+        },
+        _message: function(msg) {
+          // socketMock.onmessage && socketMock.onmessage({data: msg});
+        },
+        _error: function() {
+          socketMock.readyState = WebSocket.CLOSED;
+          // socketMock.onerror && socketMock.onerror();
+        },
+        _close: function() {
+          socketMock.readyState = WebSocket.CLOSED;
+          // socketMock.onclose && socketMock.onclose();
+        }
+      };
+      return socketMock;
+    });
+  });
+
+  it('ndtClientObject creates WebSocket which connects to address', function() {
+    var ndtServerAddress = 'test.address.measurement-lab.org';
+    var ndtClientObject = new NDTjs(ndtServerAddress);
+    var ndtExpectedPath = 'ws://' + ndtServerAddress + ':' +
+        ndtClientObject.settings.serverPort +
+        ndtClientObject.settings.serverPath;
+    ndtClientObject.createWebSocket(ndtClientObject.settings.serverAddress,
+                                    ndtClientObject.settings.serverPort,
+                                    ndtClientObject.settings.serverPath,
+                                    'unitTest');
+    expect(window.WebSocket).toHaveBeenCalledWith(ndtExpectedPath, 'unitTest');
   });
 });
