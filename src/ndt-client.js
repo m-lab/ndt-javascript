@@ -63,7 +63,7 @@ var NDTjs = function(serverAddress, serverPort, serverPath, verboseDebug) {
   this.logger('Initialized NDTjs with the following settings: ' +
       JSON.stringify(this.settings));
 
-  if (!this.checkBrowserSupport()) {
+  if (!this.checkEnvironmentSupport()) {
     this.logger('Browser or runtime environment does not support WebSockets');
     throw new Error('UnsupportedBrowser');
   }
@@ -83,12 +83,12 @@ NDTjs.prototype.logger = function(logMessage) {
 };
 
 /**
- * Check that the browser supports the NDT test.
+ * Check that the environment supports the NDT test.
  *
  * @returns {Boolean} Browser supports necessary functions for test client.
  */
 
-NDTjs.prototype.checkBrowserSupport = function() {
+NDTjs.prototype.checkEnvironmentSupport = function() {
 
   if (WebSocket === undefined && window.WebSocket === undefined &&
       window.MozWebSocket === undefined) {
@@ -108,7 +108,7 @@ NDTjs.prototype.parseNDTMessage = function(passedBuffer) {
   var i;
   var bufferUint8;
   var NDTMessage = {
-    'type': [],
+    'type': undefined,
     'message': undefined,
   };
   try {
@@ -120,9 +120,10 @@ NDTjs.prototype.parseNDTMessage = function(passedBuffer) {
     throw new Error('NDTMessageParserError');
   }
 
-  for (i = 0; i < 3; i += 1) {
-    NDTMessage.type[i] = bufferUint8[i];
+  if ((bufferUint8.length - 3) !== ((bufferUint8[1] << 8) | bufferUint8[2])) {
+    throw new Error('InvalidLengthError');
   }
+  NDTMessage.type = bufferUint8[0];
 
   return NDTMessage;
 };

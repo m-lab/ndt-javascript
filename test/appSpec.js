@@ -39,14 +39,14 @@ describe('tests that browser support checks work', function() {
     window.MozWebSocket = defaultMozWebSocket;
   });
 
-  it('checkBrowserSupport returns false without WebSockets', function() {
+  it('checkEnvironmentSupport returns false without WebSockets', function() {
     var WebSocket;
     var ndtClientObject = new NDTjs('test.address.measurement-lab.org');
 
     window.WebSocket = undefined;
     window.MozWebSocket = undefined;
 
-    expect(ndtClientObject.checkBrowserSupport()).toEqual(false);
+    expect(ndtClientObject.checkEnvironmentSupport()).toEqual(false);
   });
 
   it('ndtClientObject throws Error without browser support', function() {
