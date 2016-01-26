@@ -68,9 +68,19 @@ describe('tests NDT message creation function', function() {
     ndtClientObject = new NDTjs('test.address.measurement-lab.org');
   });
 
+  it('should ensure NDT message constants are aligned', function() {
+    var i;
+    var constants = ndtClientObject.constants;
+
+    for (i = 0; i < constants.MESSAGE_NAME.length; i += 1) {
+      expect(constants.messageType[constants.MESSAGE_NAME[i]]).toEqual(i);
+    }
+  });
+
   it('should properly make a NDT login message', function() {
     var desiredTests = (2 | 4 | 32);
-    var messageBody = '{ "msg": "v3.5.5", "tests": "' +
+    var messageBody = '{ "msg": "' +
+        ndtClientObject.constants.NDT_SERVER_VERSION + '", "tests": "' +
         String(desiredTests | 16) + '" }';
 
     compareMessageToParameters(ndtClientObject.makeNDTLogin(desiredTests), 11,

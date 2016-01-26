@@ -39,6 +39,7 @@ var NDTjs = function(serverAddress, serverPort, serverPath, verboseDebug) {
      * any way they want), but we should at least make it possible for them to
      * send multiples of 8192 bytes.
      */
+    NDT_SERVER_VERSION: 'v3.5.5',
     SEND_BUFFER_SIZE: 8192 * 128,
     messageType: {
       COMM_FAILURE: 0,
@@ -124,8 +125,8 @@ NDTjs.prototype.checkEnvironmentSupport = function() {
  */
 
 NDTjs.prototype.makeNDTLogin = function(desiredTests) {
-  var messageBody = '{ "msg": "v3.5.5", "tests": "' +
-      String(desiredTests | 16) + '" }';
+  var messageBody = '{ "msg": "' + this.constants.NDT_SERVER_VERSION + '", ' +
+      '"tests": "' + String(desiredTests | 16) + '" }';
 
   return this.makeNDTMessageArray(this.constants.messageType.MSG_EXTENDED_LOGIN,
       messageBody);
