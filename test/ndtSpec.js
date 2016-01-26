@@ -45,3 +45,45 @@ describe('tests ndt message parsing function', function() {
         .toThrow(new Error('NDTMessageParserError'));
   });
 });
+
+describe('tests NDT message creation function', function() {
+  'use strict';
+
+  var ndtClientObject;
+  var compareMessageToParameters = function(NDTMessage, messageType,
+      messageBody) {
+    var i;
+
+    expect(NDTMessage[0]).toEqual(messageType);
+    expect(NDTMessage[1]).toEqual((messageBody.length >> 8) & 0xFF);
+    expect(NDTMessage[2]).toEqual(messageBody.length & 0xFF);
+
+    for (i = 0; i < messageBody.length; i += 1) {
+      expect(NDTMessage[i + 3]).toEqual(messageBody.charCodeAt(i));
+    }
+
+  };
+
+  beforeEach(function() {
+    ndtClientObject = new NDTjs('test.address.measurement-lab.org');
+  });
+
+  it('should properly make a NDT login message', function() {
+    var desiredTests = (2 | 4 | 32);
+    var messageBody = '{ "msg": "v3.5.5", "tests": "' +
+        String(desiredTests | 16) + '" }';
+
+    compareMessageToParameters(ndtClientObject.makeNDTLogin(desiredTests), 11,
+        messageBody);
+  });
+
+  it('should properly make a NDT message', function() {
+    var desiredType = 99;
+    var desiredMessage = 'OKAY';
+    var messageBody = '{ "msg": "' + desiredMessage + '" }';
+
+    compareMessageToParameters(ndtClientObject.makeNDTMessage(desiredType,
+        desiredMessage), desiredType, messageBody);
+  });
+
+});

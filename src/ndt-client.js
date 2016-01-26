@@ -39,7 +39,24 @@ var NDTjs = function(serverAddress, serverPort, serverPath, verboseDebug) {
      * any way they want), but we should at least make it possible for them to
      * send multiples of 8192 bytes.
      */
-    SEND_BUFFER_SIZE: 8192 * 128
+    SEND_BUFFER_SIZE: 8192 * 128,
+    messageType: {
+      COMM_FAILURE: 0,
+      SRV_QUEUE: 1,
+      MSG_LOGIN: 2,
+      TEST_PREPARE: 3,
+      TEST_START: 4,
+      TEST_MSG: 5,
+      TEST_FINALIZE: 6,
+      MSG_ERROR: 7,
+      MSG_RESULTS: 8,
+      MSG_LOGOUT: 9,
+      MSG_WAITING: 10,
+      MSG_EXTENDED_LOGIN: 11
+    },
+    MESSAGE_NAME: ['COMM_FAILURE', 'SRV_QUEUE', 'MSG_LOGIN', 'TEST_PREPARE',
+        'TEST_START', 'TEST_MSG', 'TEST_FINALIZE', 'MSG_ERROR', 'MSG_RESULTS',
+        'MSG_LOGOUT', 'MSG_WAITING', 'MSG_EXTENDED_LOGIN']
   };
   this.settings = {
     metaInformation: {
@@ -95,6 +112,64 @@ NDTjs.prototype.checkEnvironmentSupport = function() {
     return false;
   }
   return true;
+};
+
+/**
+ * A generic login creation system for NDT.
+ *
+ * @param {Number} desiredTests The types of tests requested from the server
+ *  signaled based on a bitwise operation of the test ids.
+ * @returns {Uint8Array} An array of bytes suitable for sending on a binary
+ *  websocket.
+ */
+
+NDTjs.prototype.makeNDTLogin = function(desiredTests) {
+  var messageBody = '{ "msg": "v3.5.5", "tests": "' +
+      String(desiredTests | 16) + '" }';
+
+  return this.makeNDTMessageArray(this.constants.messageType.MSG_EXTENDED_LOGIN,
+      messageBody);
+};
+
+/**
+ * A generic message creation system for NDT.
+ *
+ * @param {Number} messageType The type of message according to NDT's
+ *  specification.
+ * @param {String} messageContent The message to send the server.
+ * @returns {Uint8Array} An array of bytes suitable for sending on a binary
+ *  websocket.
+ */
+
+NDTjs.prototype.makeNDTMessage = function(messageType, messageContent) {
+   var messageBody = '{ "msg": "' + messageContent + '" }';
+
+   return this.makeNDTMessageArray(messageType, messageBody);
+ };
+
+/**
+ * A helper function to consistently build Uint8Arrays for NDT messaging
+ *
+ * @param {Number} messageType The type of message according to NDT's
+ *  specification.
+ * @param {String} messageBody The String-encoded JSON message.
+ * @returns {Uint8Array} An array of bytes suitable for sending on a binary
+ *  websocket.
+ */
+
+NDTjs.prototype.makeNDTMessageArray = function(messageType, messageBody) {
+  var NDTMessage;
+  var i;
+
+  NDTMessage = new Uint8Array(messageBody.length + 3);
+  NDTMessage[0] = messageType;
+  NDTMessage[1] = (messageBody.length >> 8) & 0xFF;
+  NDTMessage[2] = messageBody.length & 0xFF;
+
+  for (i = 0; i < messageBody.length; i += 1) {
+    NDTMessage[i + 3] = messageBody.charCodeAt(i);
+  }
+  return NDTMessage;
 };
 
 /**
