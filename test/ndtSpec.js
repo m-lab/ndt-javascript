@@ -2,6 +2,23 @@ describe('tests ndt message parsing function', function() {
   'use strict';
 
   var ndtClientObject;
+  var buildMessageBuffer = function(messageType, messageBody) {
+    var i;
+    var messageBodyJSONString = JSON.stringify({msg: messageBody});
+    var testBuffer = new ArrayBuffer(messageBodyJSONString.length + 3);
+    var testBufferView = new Uint8Array(testBuffer);
+
+    testBufferView[0] = messageType;
+
+    for (i = 0; i < messageBodyJSONString.length; i += 1) {
+      testBufferView[i + 3] = messageBodyJSONString.charCodeAt(i);
+    }
+
+    testBufferView[1] = (messageBodyJSONString.length >> 8) & 0xFF;
+    testBufferView[2] = messageBodyJSONString.length & 0xFF;
+
+    return testBuffer;
+  };
 
   beforeEach(function() {
     ndtClientObject = new NDTjs('test.address.measurement-lab.org');
@@ -9,14 +26,7 @@ describe('tests ndt message parsing function', function() {
 
   it('should properly parse an NDT message', function() {
     var returnedNDTMessage;
-    var testBuffer = new ArrayBuffer(5);
-    var testBufferView = new Uint8Array(testBuffer);
-
-    testBufferView[0] = 1;
-    testBufferView[1] = 0;
-    testBufferView[2] = 2;
-    testBufferView[3] = String('O').charCodeAt();
-    testBufferView[4] = String('K').charCodeAt();
+    var testBuffer = buildMessageBuffer(1, 'OK');
 
     returnedNDTMessage = ndtClientObject.parseNDTMessage(testBuffer);
     expect(returnedNDTMessage.type).toEqual(1);
@@ -25,16 +35,10 @@ describe('tests ndt message parsing function', function() {
 
   it('should throw InvalidLengthError on invalid message length', function() {
     var returnedNDTMessage;
-    var testBuffer = new ArrayBuffer(5);
+    var testBuffer = buildMessageBuffer(1, 'FAIL');
     var testBufferView = new Uint8Array(testBuffer);
 
-    testBufferView[0] = 1;
-    testBufferView[1] = 1;
-    testBufferView[2] = 9;
-    testBufferView[3] = String('F').charCodeAt();
-    testBufferView[4] = String('A').charCodeAt();
-    testBufferView[4] = String('I').charCodeAt();
-    testBufferView[4] = String('L').charCodeAt();
+    testBufferView[2] = 99;
 
     expect(function() { ndtClientObject.parseNDTMessage(testBuffer); })
         .toThrow(new Error('InvalidLengthError'));
@@ -96,4 +100,18 @@ describe('tests NDT message creation function', function() {
         desiredMessage), desiredType, messageBody);
   });
 
+});
+
+describe('tests ndt runtime', function() {
+  'use strict';
+
+  var ndtClientObject;
+
+  beforeEach(function() {
+    ndtClientObject = new NDTjs('ndt.iupui.mlab1.iad02.measurement-lab.org');
+  });
+
+  it('should properly parse an NDT message', function() {
+    ndtClientObject.startTest();
+  });
 });
