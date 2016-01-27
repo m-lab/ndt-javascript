@@ -30,6 +30,13 @@ var NDTjs = function(serverAddress, serverPort, serverPath, verboseDebug) {
   };
 
   this.constants = {
+    NDT_SERVER_VERSION: 'v3.5.5',
+    /*
+     * Sign up for every test except for TEST_MID and TEST_SFW - browsers can't
+     * open server sockets, which makes those tests impossible, because they
+     * require the server to open a connection to a port on the client.
+     */
+    NDT_DESIRED_TESTS: (2 | 4 | 32),
     /*
      * Send 1MiB websocket messages, as this seems to cause Chrome to have the
      * fewest performance problems.  It is important that this number be a
@@ -39,7 +46,6 @@ var NDTjs = function(serverAddress, serverPort, serverPath, verboseDebug) {
      * any way they want), but we should at least make it possible for them to
      * send multiples of 8192 bytes.
      */
-    NDT_SERVER_VERSION: 'v3.5.5',
     SEND_BUFFER_SIZE: 8192 * 128,
     messageType: {
       COMM_FAILURE: 0,
@@ -183,14 +189,15 @@ NDTjs.prototype.makeNDTMessageArray = function(messageType, messageBody) {
 NDTjs.prototype.parseNDTMessage = function(passedBuffer) {
   var i;
   var bufferUint8;
+  var bufferJSON;
   var NDTMessage = {
     'type': undefined,
     'message': undefined,
   };
   try {
     bufferUint8 = new Uint8Array(passedBuffer);
-    NDTMessage.message = String.fromCharCode.apply(null,
-        new Uint8Array(passedBuffer.slice(3)));
+    bufferJSON = JSON.parse(String.fromCharCode.apply(null,
+        new Uint8Array(passedBuffer.slice(3))));
   } catch (caughtError) {
     this.logger('Caught exception: ' + caughtError);
     throw new Error('NDTMessageParserError');
@@ -200,7 +207,9 @@ NDTjs.prototype.parseNDTMessage = function(passedBuffer) {
     throw new Error('InvalidLengthError');
   }
   NDTMessage.type = bufferUint8[0];
-
+  if (bufferJSON.msg) {
+    NDTMessage.message = bufferJSON.msg;
+  }
   return NDTMessage;
 };
 
@@ -218,7 +227,121 @@ NDTjs.prototype.createWebSocket = function(serverAddress, serverPort,
                                            serverPath, websocketProtocol) {
   var createdWebSocket;
   createdWebSocket = new WebSocket('ws://' + serverAddress + ':' +
-      serverPort + serverPath, websocketProtocol);
+      String(serverPort) + serverPath, websocketProtocol);
   createdWebSocket.binaryType = 'arraybuffer';
   return createdWebSocket;
+};
+
+/**
+ * Start a series of NDT tests.
+ **/
+
+NDTjs.prototype.startTest = function() {
+  var ndtControlSocket;
+  var ndtState;
+  var remainingTests = [];
+  var that = this;
+
+  ndtControlSocket = this.createWebSocket(this.settings.serverAddress,
+                                          this.settings.serverPort,
+                                          this.settings.serverPath,
+                                          'ndt');
+  this.logger('Test started.  Waiting for connection to server...');
+
+  ndtControlSocket.onopen = function() {
+    // When the NDT control socket is opened, send a message requesting a
+    // TEST_S2C, TEST_C2S, and TEST_META.
+    that.logger('Opened connection on port ' + that.settings.serverPort);
+    ndtControlSocket.send(that.makeNDTLogin(that.constants.NDT_DESIRED_TESTS));
+    ndtState = 'LOGIN_SENT';
+  };
+
+  ndtControlSocket.onmessage = function(response) {
+    var parsedMessage = that.parseNDTMessage(response.data);
+    var parsedTestIds;
+    var activeTest;
+
+    that.logger('type = ' + parsedMessage.type + ' (' +
+                that.constants.MESSAGE_NAME[parsedMessage.type] + ') body = "' +
+                parsedMessage.message + '"');
+
+    if (activeTest === undefined && remainingTests.length > 0) {
+      activeTest = remainingTests.pop();
+      that.logger('Calling subtest');
+      if (activeTest(parsedMessage) === 'DONE') {
+        activeTest = undefined;
+        that.logger('Completed subtest');
+      }
+      return;
+    }
+    if (ndtState === 'LOGIN_SENT') {
+      // Response to NDT_LOGIN should be SRV_QUEUE messages until we get
+      // SRV_QUEUE("0")
+      if (parsedMessage.type === that.constants.messageType.SRV_QUEUE) {
+        if (parsedMessage.message === '9990') {
+          // Special keepalive message
+          ndtControlSocket.send(that.makeNDTMessage(
+              that.constants.messageType.MSG_WAITING, ''));
+        } else if (parsedMessage.message === '9977') {
+          // Test failed
+          throw new Error('SrvQueueFailure');
+        } else {
+          that.logger('Received wait notice; pausing %d minutes to start.',
+              parsedMessage.message);
+        }
+        that.logger('Recieved SRV_QUEUE. Ignoring and waiting for MSG_LOGIN');
+      } else if (parsedMessage.type === that.constants.messageType.MSG_LOGIN) {
+        if (parsedMessage.message[0] !== 'v') {
+          throw new Error('BadMessage');
+        }
+        ndtState = 'WAIT_FOR_TEST_IDS';
+      } else {
+        that.logger('Bad type %s when we wanted a SRV_QUEUE or MSG_LOGIN',
+            that.constants.MESSAGE_NAME[parsedMessage.type]);
+        throw Error('UnexpectedStateTransition');
+      }
+    } else if (ndtState === 'WAIT_FOR_TEST_IDS' &&
+        parsedMessage.type === that.constants.messageType.MSG_LOGIN) {
+      parsedTestIds = parsedMessage.message.split(' ');
+      if (parsedTestIds.indexOf('2') !== -1) {
+        remainingTests.push(that.testC2S());
+      }
+      if (parsedTestIds.indexOf('4') !== -1) {
+        remainingTests.push(that.testS2C(ndtControlSocket));
+      }
+      if (parsedTestIds.indexOf('32') !== -1) {
+        remainingTests.push(that.testMeta(ndtControlSocket));
+      }
+      ndtState = 'WAIT_FOR_MSG_RESULTS';
+    } else if (ndtState === 'WAIT_FOR_MSG_RESULTS' &&
+        parsedMessage.type === that.constants.messageType.MSG_RESULTS) {
+      // Receive Test Results.
+    } else if (ndtState === 'WAIT_FOR_MSG_RESULTS' &&
+        parsedMessage.type === that.constants.messageType.MSG_LOGOUT) {
+      // Finished, close down.
+      ndtControlSocket.close();
+      return;
+    } else {
+      throw Error('UnexpectedStateTransition');
+    }
+  };
+
+  ndtControlSocket.onerror = function(response) {
+    var errorMessage = that.parseNDTMessage(response.data);
+    that.logger('Received fatal testing error ' + errorMessage.message);
+    throw new Error('ConnectionException');
+  };
+
+};
+
+NDTjs.prototype.testS2C = function() {
+  return function(ndtMessage) {};
+};
+
+NDTjs.prototype.testC2S = function(ndtControlSocket) {
+  return function(ndtMessage) {};
+};
+
+NDTjs.prototype.testMeta = function(ndtControlSocket) {
+  return function(ndtMessage) {};
 };
