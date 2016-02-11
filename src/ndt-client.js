@@ -30,6 +30,10 @@ var NDTjs = function(serverAddress, serverPort, serverPath, verboseDebug) {
   };
 
   this.constants = {
+    /*
+     * NDT server version that the client is compatible with, sent in the
+     * login process.
+     */
     NDT_SERVER_VERSION: 'v3.5.5',
     /*
      * Sign up for every test except for TEST_MID and TEST_SFW - browsers can't
@@ -60,6 +64,10 @@ var NDTjs = function(serverAddress, serverPort, serverPath, verboseDebug) {
       MSG_LOGOUT: 9,
       MSG_WAITING: 10,
       MSG_EXTENDED_LOGIN: 11
+    },
+    testState: {
+      LOGIN_SENT: 0,
+      WAIT_FOR_TEST_IDS: 1,
     },
     MESSAGE_NAME: ['COMM_FAILURE', 'SRV_QUEUE', 'MSG_LOGIN', 'TEST_PREPARE',
         'TEST_START', 'TEST_MSG', 'TEST_FINALIZE', 'MSG_ERROR', 'MSG_RESULTS',
@@ -207,6 +215,9 @@ NDTjs.prototype.parseNDTMessage = function(passedBuffer) {
     throw new Error('InvalidLengthError');
   }
   NDTMessage.type = bufferUint8[0];
+  if (this.constants.MESSAGE_NAME.indexOf(NDTMessage.type) != -1) {
+    throw new Error('UnknownNDTMessageType');
+  }
   if (bufferJSON.msg) {
     NDTMessage.message = bufferJSON.msg;
   }
@@ -249,74 +260,94 @@ NDTjs.prototype.startTest = function() {
   this.logger('Test started.  Waiting for connection to server...');
 
   ndtControlSocket.onopen = function() {
-    // When the NDT control socket is opened, send a message requesting a
-    // TEST_S2C, TEST_C2S, and TEST_META.
+    // When the NDT control socket is opened, send a message requesting the
+    // series of tests set in the NDT_DESIRED_TESTS constant.
     that.logger('Opened connection on port ' + that.settings.serverPort);
     ndtControlSocket.send(that.makeNDTLogin(that.constants.NDT_DESIRED_TESTS));
-    ndtState = 'LOGIN_SENT';
+    ndtState = that.constant.testState.LOGIN_SENT;
   };
 
   ndtControlSocket.onmessage = function(response) {
     var parsedMessage = that.parseNDTMessage(response.data);
+    var testInProgress = false;
     var parsedTestIds;
-    var activeTest;
 
     that.logger('type = ' + parsedMessage.type + ' (' +
                 that.constants.MESSAGE_NAME[parsedMessage.type] + ') body = "' +
                 parsedMessage.message + '"');
 
-    if (activeTest === undefined && remainingTests.length > 0) {
-      activeTest = remainingTests.pop();
+    if (!testInProgress && remainingTests.length > 0) {
+      testInProgress = true;
       that.logger('Calling subtest');
-      if (activeTest(parsedMessage) === 'DONE') {
-        activeTest = undefined;
+      if (remainingTests.pop()(parsedMessage) === 'DONE') {
+        testInProgress = false;
         that.logger('Completed subtest');
+      } else {
+        throw new Error('SubTestFailure');
       }
       return;
     }
-    if (ndtState === 'LOGIN_SENT') {
-      // Response to NDT_LOGIN should be SRV_QUEUE messages until we get
-      // SRV_QUEUE("0")
+    if (ndtState === that.constant.testState.LOGIN_SENT) {
+      // If we do not see MSG_LOGIN from the start, the response to NDT_LOGIN
+      // should be SRV_QUEUE messages until we get SRV_QUEUE("0"), which
+      // indicates that the test session should start.
       if (parsedMessage.type === that.constants.messageType.SRV_QUEUE) {
-        if (parsedMessage.message === '9990') {
+        if (parsedMessage.message === '0') {
+          that.logger('The test session will start now');
+        } else if (parsedMessage.message === '9990') {
           // Special keepalive message
           ndtControlSocket.send(that.makeNDTMessage(
               that.constants.messageType.MSG_WAITING, ''));
         } else if (parsedMessage.message === '9977') {
-          // Test failed
-          throw new Error('SrvQueueFailure');
+          // Test failed with SRV_QUEUE_SERVER_FAULT message.
+          throw new Error('SrvQueueServerFault');
+        } else if (parsedMessage.message === '9988') {
+          // Test failed with SRV_QUEUE_SERVER_BUSY message.
+          throw new Error('SrvQueueServerBusy');
         } else {
           that.logger('Received wait notice; pausing %d minutes to start.',
               parsedMessage.message);
         }
         that.logger('Recieved SRV_QUEUE. Ignoring and waiting for MSG_LOGIN');
       } else if (parsedMessage.type === that.constants.messageType.MSG_LOGIN) {
+        // Currently any client capable of connecting through WebSocket
+        // is compatible with the Javascript client, so we check that we have
+        // received the correct message (a server version), but we do not do
+        // any further validation.
         if (parsedMessage.message[0] !== 'v') {
           throw new Error('BadMessage');
         }
-        ndtState = 'WAIT_FOR_TEST_IDS';
+        ndtState = that.constant.testState.WAIT_FOR_TEST_IDS;
       } else {
         that.logger('Bad type %s when we wanted a SRV_QUEUE or MSG_LOGIN',
             that.constants.MESSAGE_NAME[parsedMessage.type]);
         throw Error('UnexpectedStateTransition');
       }
-    } else if (ndtState === 'WAIT_FOR_TEST_IDS' &&
+    } else if (ndtState === that.constant.testState.WAIT_FOR_TEST_IDS &&
         parsedMessage.type === that.constants.messageType.MSG_LOGIN) {
       parsedTestIds = parsedMessage.message.split(' ');
       if (parsedTestIds.indexOf('2') !== -1) {
+        parsedTestIds.splice(parsedTestIds.indexOf('2'), 1);
         remainingTests.push(that.testC2S());
       }
       if (parsedTestIds.indexOf('4') !== -1) {
+        parsedTestIds.splice(parsedTestIds.indexOf('4'), 1);
         remainingTests.push(that.testS2C(ndtControlSocket));
       }
       if (parsedTestIds.indexOf('32') !== -1) {
+        parsedTestIds.splice(parsedTestIds.indexOf('32'), 1);
         remainingTests.push(that.testMeta(ndtControlSocket));
       }
-      ndtState = 'WAIT_FOR_MSG_RESULTS';
-    } else if (ndtState === 'WAIT_FOR_MSG_RESULTS' &&
+      // Tests that are supported by this client. NDT spec requires that if we
+      // receive a test id that we do not support, we terminate the connection.
+      if (parsedTestIds.length > 0) {
+        throw Error('ReceivedUnsupportedTest');
+      }
+      ndtState = that.constant.testState.WAIT_FOR_MSG_RESULTS;
+    } else if (ndtState === that.constant.testState.WAIT_FOR_MSG_RESULTS &&
         parsedMessage.type === that.constants.messageType.MSG_RESULTS) {
-      // Receive Test Results.
-    } else if (ndtState === 'WAIT_FOR_MSG_RESULTS' &&
+      // [To Complete] Receive Test Results.
+    } else if (ndtState === that.constant.testState.WAIT_FOR_MSG_RESULTS &&
         parsedMessage.type === that.constants.messageType.MSG_LOGOUT) {
       // Finished, close down.
       ndtControlSocket.close();
@@ -335,13 +366,19 @@ NDTjs.prototype.startTest = function() {
 };
 
 NDTjs.prototype.testS2C = function() {
-  return function(ndtMessage) {};
+  return function(ndtMessage) {
+    // [To Complete] S2C Test Functionality
+  };
 };
 
 NDTjs.prototype.testC2S = function(ndtControlSocket) {
-  return function(ndtMessage) {};
+  return function(ndtMessage) {
+    // [To Complete] C2S Test Functionality
+  };
 };
 
 NDTjs.prototype.testMeta = function(ndtControlSocket) {
-  return function(ndtMessage) {};
+  return function(ndtMessage) {
+    // [To Complete] Meta Test Functionality
+  };
 };

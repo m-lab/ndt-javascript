@@ -108,7 +108,7 @@ describe('tests ndt runtime', function() {
   var ndtClientObject;
 
   beforeEach(function() {
-    ndtClientObject = new NDTjs('ndt.iupui.mlab1.iad02.measurement-lab.org');
+    ndtClientObject = new NDTjs('test.address.measurement-lab.org');
   });
 
   it('should properly parse an NDT message', function() {
