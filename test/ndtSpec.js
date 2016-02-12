@@ -2,6 +2,23 @@ describe('tests ndt message parsing function', function() {
   'use strict';
 
   var ndtClientObject;
+  var buildMessageBuffer = function(messageType, messageBody) {
+    var i;
+    var messageBodyJSONString = JSON.stringify({msg: messageBody});
+    var testBuffer = new ArrayBuffer(messageBodyJSONString.length + 3);
+    var testBufferView = new Uint8Array(testBuffer);
+
+    testBufferView[0] = messageType;
+
+    for (i = 0; i < messageBodyJSONString.length; i += 1) {
+      testBufferView[i + 3] = messageBodyJSONString.charCodeAt(i);
+    }
+
+    testBufferView[1] = (messageBodyJSONString.length >> 8) & 0xFF;
+    testBufferView[2] = messageBodyJSONString.length & 0xFF;
+
+    return testBuffer;
+  };
 
   beforeEach(function() {
     ndtClientObject = new NDTjs('test.address.measurement-lab.org');
@@ -9,35 +26,34 @@ describe('tests ndt message parsing function', function() {
 
   it('should properly parse an NDT message', function() {
     var returnedNDTMessage;
-    var testBuffer = new ArrayBuffer(5);
-    var testBufferView = new Uint8Array(testBuffer);
-
-    testBufferView[0] = 1;
-    testBufferView[1] = 0;
-    testBufferView[2] = 2;
-    testBufferView[3] = String('O').charCodeAt();
-    testBufferView[4] = String('K').charCodeAt();
+    var requestedMessageId = ndtClientObject.constants.MessageType.TEST_START;
+    var testBuffer = buildMessageBuffer(requestedMessageId, 'OK');
 
     returnedNDTMessage = ndtClientObject.parseNDTMessage(testBuffer);
-    expect(returnedNDTMessage.type).toEqual(1);
+    expect(returnedNDTMessage.type).toEqual(requestedMessageId);
     expect(returnedNDTMessage.message).toBe('OK');
   });
 
   it('should throw InvalidLengthError on invalid message length', function() {
     var returnedNDTMessage;
-    var testBuffer = new ArrayBuffer(5);
+    var requestedMessageId = ndtClientObject.constants.MessageType.TEST_START;
+    var testBuffer = buildMessageBuffer(requestedMessageId, 'FAIL');
     var testBufferView = new Uint8Array(testBuffer);
 
-    testBufferView[0] = 1;
-    testBufferView[1] = 1;
-    testBufferView[2] = 9;
-    testBufferView[3] = String('F').charCodeAt();
-    testBufferView[4] = String('A').charCodeAt();
-    testBufferView[4] = String('I').charCodeAt();
-    testBufferView[4] = String('L').charCodeAt();
+    testBufferView[2] = 99;
 
     expect(function() { ndtClientObject.parseNDTMessage(testBuffer); })
         .toThrow(new Error('InvalidLengthError'));
+  });
+
+  it('should throw UnknownNDTMessageType on invalid message type', function() {
+    var returnedNDTMessage;
+    var requestedMessageId = ndtClientObject.constants.MESSAGE_NAME.length + 1;
+    var testBuffer = buildMessageBuffer(requestedMessageId, 'FAIL');
+    var testBufferView = new Uint8Array(testBuffer);
+
+    expect(function() { ndtClientObject.parseNDTMessage(testBuffer); })
+        .toThrow(new Error('UnknownNDTMessageType'));
   });
 
   it('should error NDTMessageParserError on undefined buffer', function() {
@@ -73,8 +89,22 @@ describe('tests NDT message creation function', function() {
     var constants = ndtClientObject.constants;
 
     for (i = 0; i < constants.MESSAGE_NAME.length; i += 1) {
-      expect(constants.messageType[constants.MESSAGE_NAME[i]]).toEqual(i);
+      expect(constants.MessageType[constants.MESSAGE_NAME[i]]).toEqual(i);
     }
+  });
+
+  it('should ensure NDT test id objects are aligned', function() {
+    var supportedTests = ndtClientObject.constants.SupportedTests;
+    var supportedTestIDs = ndtClientObject.constants.SUPPORTED_TEST_IDS;
+    var testKey;
+    var testPlace;
+
+    for (testKey in supportedTests) {
+      testPlace = supportedTestIDs.indexOf(supportedTests[testKey]);
+      expect(testPlace).not.toBe(-1);
+      supportedTestIDs.splice(testPlace, 1);
+    }
+    expect(supportedTestIDs.length).toBe(0);
   });
 
   it('should properly make a NDT login message', function() {
@@ -96,4 +126,18 @@ describe('tests NDT message creation function', function() {
         desiredMessage), desiredType, messageBody);
   });
 
+});
+
+describe('tests ndt runtime', function() {
+  'use strict';
+
+  var ndtClientObject;
+
+  beforeEach(function() {
+    ndtClientObject = new NDTjs('test.address.measurement-lab.org');
+  });
+
+  it('should properly parse an NDT message', function() {
+    ndtClientObject.startTest();
+  });
 });
